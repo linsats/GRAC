@@ -122,6 +122,7 @@ if __name__ == "__main__":
 	episode_reward = 0
 	episode_timesteps = 0
 	episode_num = 0
+	reward_max = 1.0
 
 	# writer = utils.WriterLoggerWrapper(result_folder, comment=file_name, max_timesteps=args.max_timesteps)
 	writer = SummaryWriter(log_dir=result_folder, comment=file_name)
@@ -150,7 +151,9 @@ if __name__ == "__main__":
 				).clip(-max_action, max_action)
 
 		# Perform action
-		next_state, reward, done, _ = env.step(action) 
+		next_state, reward, done, _ = env.step(action)
+		if np.abs(reward) > reward_max:
+			reward_max = np.abs(reward) 
 		writer.add_scalar('test/reward', reward, t+1)
 		done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
@@ -163,7 +166,7 @@ if __name__ == "__main__":
 
 		# Train agent after collecting sufficient data
 		if t >= args.start_timesteps:
-			policy.train(replay_buffer, args.batch_size, writer, 20.0)#reward_max - reward_min)
+			policy.train(replay_buffer, args.batch_size, writer, 20.0, reward_max)#reward_max - reward_min)
 
 		if done: 
 			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True

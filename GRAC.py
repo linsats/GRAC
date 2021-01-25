@@ -182,14 +182,13 @@ class GRAC():
 		self.actor.load_state_dict(torch.load(filename + "_actor"))
 		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
 
-	def train(self, replay_buffer, batch_size=100, writer=None, reward_range=20.0):
+	def train(self, replay_buffer, batch_size=100, writer=None, reward_range=20.0, reward_max=0):
 		self.total_it += 1
 		log_it = (self.total_it % self.log_freq == 0)
 		# Sample replay buffer 
 		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 
 		with torch.no_grad():
-
 			# Select action according to policy and add clipped noise
 			next_action = (
 				self.actor(next_state)
@@ -243,7 +242,7 @@ class GRAC():
 			critic_loss3_2 = F.mse_loss(target_Q1_, target_Q1) + F.mse_loss(target_Q2_, target_Q2)
 			critic_loss3 = critic_loss3_1 + critic_loss3_2 * weight_loss
 			self.update_critic(critic_loss3)
-			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(better_target_Q)) * 0.01, torch.mean(torch.abs(reward))) and critic_loss3_2 < critic_loss2_2:
+			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(better_target_Q)) * 0.01, reward_max * 2.0 * torch.ones(1).to(self.device)) and torch.sqrt(critic_loss3_2) < reward_max * 2.0:
                                         break
 		critic_loss = F.mse_loss(current_Q1, target_Q_final) + F.mse_loss(current_Q2, target_Q_final)
 		weights_actor_lr = critic_loss.detach()
@@ -259,7 +258,9 @@ class GRAC():
 			writer.add_scalar('train_loss/loss3_2_r',critic_loss3_2/critic_loss2_2,self.total_it)
 			writer.add_scalar('train_loss/loss3_1_r_loss',critic_loss3_1/critic_loss,self.total_it)
 			writer.add_scalar('train_loss/sqrt_critic_loss3_2',torch.sqrt(critic_loss3_2),self.total_it)
-	
+			writer.add_scalar('train_loss/reward_con',torch.mean(torch.abs(better_target_Q)) * 0.01,self.total_it)
+			writer.add_scalar('train_loss/max_reward',reward_max,self.total_it)	
+
 		if self.total_it % 1 == 0:
 			lr_tmp = self.actor_lr / (float(weights_actor_lr)+1.0)
 			self.actor_optimizer = self.lr_scheduler(self.actor_optimizer, lr_tmp)
