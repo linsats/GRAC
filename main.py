@@ -9,7 +9,6 @@ import datetime
 
 from torch.utils.tensorboard import SummaryWriter
 
-
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
 def eval_policy(policy, env_name, seed, eval_episodes=10):
@@ -44,15 +43,12 @@ if __name__ == "__main__":
 	parser.add_argument("--expl_noise", default=0.1)                # Std of Gaussian exploration noise
 	parser.add_argument("--batch_size", default=256, type=int)      # Batch size for both actor and critic
 	parser.add_argument("--discount", default=0.99)                 # Discount factor
-	parser.add_argument("--tau", default=0.005)                     # Target network update rate
 	parser.add_argument("--noise_clip", default=0.5)                # Range to clip target policy noise
 	parser.add_argument("--save_model", action="store_true")        # Save model and optimizer parameters
 	parser.add_argument("--load_model", default="")                 # Model load file name, "" doesn't load, "default" uses file_name
-	parser.add_argument('--n_repeat', default=20, type=int)
-	parser.add_argument('--alpha_start', default=0.7,type=float)
-	parser.add_argument('--alpha_end', default=0.85,type=float)
 	parser.add_argument('--use_expl_noise', action="store_true")
-
+	parser.add_argument('--log_freq',default=200,type=int)
+	parser.add_argument('--loss_decay',default=200)
 	parser.add_argument("--debug", action="store_true")
 	parser.add_argument("--comment", default="")
 	parser.add_argument("--exp_name", default="exp_ant")
@@ -97,16 +93,13 @@ if __name__ == "__main__":
 	if args.save_model is False:
 		args.save_model = True
 	kwargs = {
-		"env": args.env,
 		"state_dim": state_dim,
 		"action_dim": action_dim,
 		"max_action": max_action,
 		"batch_size": args.batch_size,
 		"discount": args.discount,
-		"tau": args.tau,
-		"n_repeat": args.n_repeat,
-		"alpha_start": args.alpha_start,
-		"alpha_end":args.alpha_end,
+		"log_freq":args.log_freq,
+                "loss_decay":args.loss_decay,
 		"device": device,
 	}
 
@@ -115,7 +108,6 @@ if __name__ == "__main__":
 		# Target policy smoothing is scaled wrt the action scale
 		GRAC = __import__(args.policy)
 		policy = GRAC.GRAC(**kwargs)
-
 
 	if args.load_model != "":
 		policy_file = 'model' if args.load_model == "default" else args.load_model

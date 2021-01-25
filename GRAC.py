@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from ES import Searcher
 from torch.distributions import Normal
-
+import math
 import matplotlib.pyplot as plt
 import datetime
 import os
@@ -96,46 +96,41 @@ class Critic(nn.Module):
 class GRAC():
 	def __init__(
 		self,
-		env,
 		state_dim,
 		action_dim,
 		max_action,
 		batch_size=256,
 		discount=0.99,
-		tau=0.005,
 		max_timesteps=3e6,
-		n_repeat=4,
                 actor_lr = 3e-4,
-		alpha_start=0.7,
-                alpha_end=0.9,
+                critic_lr = 3e-4,
+                loss_decay = 0.95,
+                log_freq = 200,
 		device=torch.device('cuda'),
 	):
 		self.action_dim = action_dim
 		self.state_dim = state_dim
 		self.max_action = max_action
 		self.discount = discount
-		self.tau = tau
 		self.total_it = 0
 
 		self.device = device
 		self.actor_lr = actor_lr # here is actor lr is not the real actor learning rate
+		self.critic_lr = critic_lr
+		self.loss_decay = loss_decay
 
 		self.actor = Actor(state_dim, action_dim, max_action).to(device)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
 
 		self.critic = Critic(state_dim, action_dim).to(device)
-		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
+		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=self.critic_lr)
 
 		cem_sigma = 1e-2
 		cem_clip = 0.5 * max_action
 		self.searcher = Searcher(action_dim, max_action, device=device, sigma_init=cem_sigma, clip=cem_clip, batch_size=batch_size)
 		self.action_dim = float(action_dim)
-		self.log_freq = 200
-		self.third_loss_bound = alpha_start
-		self.third_loss_bound_end = alpha_end
+		self.log_freq = log_freq
 		self.max_timesteps = max_timesteps
-
-		self.max_iter_steps = n_repeat
 		self.cem_loss_coef = 1.0/float(self.action_dim)
 		self.selection_action_coef = 1.0
 
@@ -228,34 +223,43 @@ class GRAC():
 
 		current_Q1_, current_Q2_ = self.critic(state, action)
 		target_Q1_, target_Q2_ = self.critic(next_state, next_action)
-		critic_loss3 = F.mse_loss(current_Q1_, target_Q_final) + F.mse_loss(current_Q2_, target_Q_final) + F.mse_loss(target_Q1_, target_Q1) + F.mse_loss(target_Q2_, target_Q2)
+		critic_loss2_1 = F.mse_loss(current_Q1_, target_Q_final) + F.mse_loss(current_Q2_, target_Q_final) 
+		critic_loss2_2 = F.mse_loss(target_Q1_, target_Q1) + F.mse_loss(target_Q2_, target_Q2)	
+		weight1 = critic_loss2_1.item()
+		weight2 = critic_loss2_2.item()	
+		weight_loss = (math.sqrt(weight1) + 1.)/( math.sqrt(weight2) + 1.)
+		critic_loss3 = critic_loss2_1 + critic_loss2_2 * weight_loss
 		self.update_critic(critic_loss3)
 		init_critic_loss3 = critic_loss3.clone()
 		ratio = 0.0
 		max_step = 0
 
 		idi = 0
-		cond1 = 0
-		cond2 = 0
 		while True:
 			idi = idi + 1
 			current_Q1_, current_Q2_ = self.critic(state, action)
 			target_Q1_, target_Q2_ = self.critic(next_state, next_action)
-			critic_loss3 = F.mse_loss(current_Q1_, target_Q_final) + F.mse_loss(current_Q2_, target_Q_final) + F.mse_loss(target_Q1_, target_Q1) + F.mse_loss(target_Q2_, target_Q2)
+			critic_loss3_1 = F.mse_loss(current_Q1_, target_Q_final) + F.mse_loss(current_Q2_, target_Q_final)
+			critic_loss3_2 = F.mse_loss(target_Q1_, target_Q1) + F.mse_loss(target_Q2_, target_Q2)
+			critic_loss3 = critic_loss3_1 + critic_loss3_2 * weight_loss
 			self.update_critic(critic_loss3)
-			if self.total_it < self.max_timesteps:
-				bound = self.third_loss_bound + float(self.total_it) / float(self.max_timesteps) * (self.third_loss_bound_end - self.third_loss_bound)
-			else:
-				bound = self.third_loss_bound_end
-			if critic_loss3 < init_critic_loss3 * bound:
-				cond1 = 1
-				break   
-			if idi >= self.max_iter_steps:
-				cond2 = 1
-				break
+			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(better_target_Q)) * 0.01, torch.mean(torch.abs(reward))) and critic_loss3_2 < critic_loss2_2:
+                                        break
 		critic_loss = F.mse_loss(current_Q1, target_Q_final) + F.mse_loss(current_Q2, target_Q_final)
 		weights_actor_lr = critic_loss.detach()
 
+		if log_it:
+			writer.add_scalar('train_critic/weight_loss', weight_loss, self.total_it)
+			writer.add_scalar('train_critic/third_loss_num', idi, self.total_it)
+
+		if log_it:
+			writer.add_scalar('train_loss/loss2_1',critic_loss2_1,self.total_it)
+			writer.add_scalar('train_loss/loss2_2',critic_loss2_2,self.total_it)
+			writer.add_scalar('train_loss/loss3_1_r',critic_loss3_1/critic_loss2_1,self.total_it)
+			writer.add_scalar('train_loss/loss3_2_r',critic_loss3_2/critic_loss2_2,self.total_it)
+			writer.add_scalar('train_loss/loss3_1_r_loss',critic_loss3_1/critic_loss,self.total_it)
+			writer.add_scalar('train_loss/sqrt_critic_loss3_2',torch.sqrt(critic_loss3_2),self.total_it)
+	
 		if self.total_it % 1 == 0:
 			lr_tmp = self.actor_lr / (float(weights_actor_lr)+1.0)
 			self.actor_optimizer = self.lr_scheduler(self.actor_optimizer, lr_tmp)
@@ -285,7 +289,6 @@ class GRAC():
 
 		if log_it:
 			with torch.no_grad():
-				writer.add_scalar('train_critic/third_loss_cond1', cond1, self.total_it)
 				writer.add_scalar('train_critic/third_loss_num', idi, self.total_it)
 				writer.add_scalar('train_critic/critic_loss', critic_loss, self.total_it)
 				writer.add_scalar('train_critic/critic_loss3', critic_loss3, self.total_it)
@@ -319,8 +322,6 @@ class GRAC():
 	
 				# current_Q2
 				writer.add_scalar('train_critic/current_Q2/mean', current_Q2.mean(), self.total_it)
-	
-	
 
 	def save(self, filename):
 		super().save(filename)
