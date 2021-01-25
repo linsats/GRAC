@@ -48,7 +48,7 @@ if __name__ == "__main__":
 	parser.add_argument("--load_model", default="")                 # Model load file name, "" doesn't load, "default" uses file_name
 	parser.add_argument('--use_expl_noise', action="store_true")
 	parser.add_argument('--log_freq',default=200,type=int)
-	parser.add_argument('--loss_decay',default=200)
+	parser.add_argument('--loss_decay',default=0.95)
 	parser.add_argument("--debug", action="store_true")
 	parser.add_argument("--comment", default="")
 	parser.add_argument("--exp_name", default="exp_ant")
