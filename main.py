@@ -113,7 +113,7 @@ if __name__ == "__main__":
 		policy_file = 'model' if args.load_model == "default" else args.load_model
 		policy.load("./{}/{}".format(result_folder, policy_file))
 
-	replay_buffer = utils.ReplayBufferTorch(state_dim, action_dim, device=device)
+	replay_buffer = utils.ReplayBufferTorch(state_dim, action_dim, device=device, discount=args.discount)
 
 	# Evaluate untrained policy
 	evaluations = [eval_policy(policy, args.env, args.seed)]
@@ -123,6 +123,9 @@ if __name__ == "__main__":
 	episode_timesteps = 0
 	episode_num = 0
 	reward_max = 1.0
+	reward_min = np.inf
+	episode_step_max = 1
+	episode_step_min = 1000
 
 	# writer = utils.WriterLoggerWrapper(result_folder, comment=file_name, max_timesteps=args.max_timesteps)
 	writer = SummaryWriter(log_dir=result_folder, comment=file_name)
@@ -152,13 +155,15 @@ if __name__ == "__main__":
 
 		# Perform action
 		next_state, reward, done, _ = env.step(action)
-		if np.abs(reward) > reward_max:
-			reward_max = np.abs(reward) 
+		if reward > reward_max:
+			reward_max = reward
+		if reward < reward_min:
+			reward_min = reward
 		writer.add_scalar('test/reward', reward, t+1)
 		done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
 		# Store data in replay buffer
-		replay_buffer.add(state, action, next_state, reward, done_bool)
+		replay_buffer.add(state, action, next_state, reward, done_bool, episode_timesteps, episode_step_min, episode_step_max)
 
 		state = next_state
 		episode_reward += reward
@@ -166,11 +171,14 @@ if __name__ == "__main__":
 
 		# Train agent after collecting sufficient data
 		if t >= args.start_timesteps:
-			policy.train(replay_buffer, args.batch_size, writer, 20.0, reward_max)#reward_max - reward_min)
-
+			policy.train(replay_buffer, args.batch_size, writer, 20.0, reward_max, episode_step_max, episode_step_min)#, replay_buffer.reward_min, episode_step_min)#reward_max - reward_min)
 		if done: 
 			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
 			print("Total T: {} Episode Num: {} Episode T: {} Reward: {:.3f}".format(t+1, episode_num+1, episode_timesteps, episode_reward))
+			if episode_timesteps > episode_step_max:
+				episode_step_max = episode_timesteps
+			if episode_timesteps < episode_step_min:
+				episode_step_min = episode_timesteps
 			# Reset environment
 			state, done = env.reset(), False
 			episode_reward = 0

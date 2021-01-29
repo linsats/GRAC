@@ -182,12 +182,11 @@ class GRAC():
 		self.actor.load_state_dict(torch.load(filename + "_actor"))
 		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
 
-	def train(self, replay_buffer, batch_size=100, writer=None, reward_range=20.0, reward_max=0):
+	def train(self, replay_buffer, batch_size=100, writer=None, reward_range=20.0, reward_max=0, episode_step_max=100, episode_step_min=1):
 		self.total_it += 1
 		log_it = (self.total_it % self.log_freq == 0)
 		# Sample replay buffer 
-		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
-
+		state, action, next_state, reward, not_done, Q_min = replay_buffer.sample(batch_size)
 		with torch.no_grad():
 			# Select action according to policy and add clipped noise
 			next_action = (
@@ -208,11 +207,25 @@ class GRAC():
 			better_target_Q = torch.max(better_target_Q, target_Q)
 
 			target_Q_final = reward + not_done * self.discount * better_target_Q
-
 			target_Q1 = better_target_Q1
 			target_Q2 = better_target_Q2
-			next_action = better_next_action
 
+			Q_max = reward_max / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
+			target_Q_final[target_Q_final > Q_max] = Q_max
+			target_Q1[target_Q1 > Q_max] = Q_max
+			target_Q2[target_Q2 > Q_max] = Q_max
+			
+			#if reward_min >= 0:
+			#	Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
+			#else:
+			#	Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
+			action_index_1 = (target_Q_final < Q_min).squeeze()
+			action_index_2 = (target_Q1 < Q_min).squeeze()
+			action_index_3 = (target_Q2 < Q_min).squeeze()
+			target_Q_final[action_index_1] = Q_min[action_index_1]
+			target_Q1[action_index_2] = Q_min[action_index_2]
+			target_Q2[action_index_3] = Q_min[action_index_3] 
+			next_action = better_next_action
 		# Get current Q estimates
 		current_Q1, current_Q2 = self.critic(state, action)
 
@@ -242,7 +255,7 @@ class GRAC():
 			critic_loss3_2 = F.mse_loss(target_Q1_, target_Q1) + F.mse_loss(target_Q2_, target_Q2)
 			critic_loss3 = critic_loss3_1 + critic_loss3_2 * weight_loss
 			self.update_critic(critic_loss3)
-			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(better_target_Q)) * 0.01, reward_max * 2.0 * torch.ones(1).to(self.device)) and torch.sqrt(critic_loss3_2) < reward_max * 2.0:
+			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(better_target_Q)) * 0.01, torch.mean(torch.abs(reward))) and torch.sqrt(critic_loss3_2) < reward_max * 1.0:
                                         break
 		critic_loss = F.mse_loss(current_Q1, target_Q_final) + F.mse_loss(current_Q2, target_Q_final)
 		weights_actor_lr = critic_loss.detach()
@@ -250,7 +263,12 @@ class GRAC():
 		if log_it:
 			writer.add_scalar('train_critic/weight_loss', weight_loss, self.total_it)
 			writer.add_scalar('train_critic/third_loss_num', idi, self.total_it)
-
+			writer.add_scalar('train_critic/Q_max', Q_max, self.total_it)
+			writer.add_scalar('train_critic/episode_step_max',episode_step_max, self.total_it)
+			writer.add_scalar('train_critic/Q_min_max', torch.max(Q_min), self.total_it)
+			writer.add_scalar('train_critic/Q_min_mean', torch.mean(Q_min), self.total_it)
+			writer.add_scalar('train_critic/Q_min_min', torch.min(Q_min), self.total_it)
+			writer.add_scalar('train_critic/episode_step_min',episode_step_min, self.total_it)
 		if log_it:
 			writer.add_scalar('train_loss/loss2_1',critic_loss2_1,self.total_it)
 			writer.add_scalar('train_loss/loss2_2',critic_loss2_2,self.total_it)
@@ -258,9 +276,10 @@ class GRAC():
 			writer.add_scalar('train_loss/loss3_2_r',critic_loss3_2/critic_loss2_2,self.total_it)
 			writer.add_scalar('train_loss/loss3_1_r_loss',critic_loss3_1/critic_loss,self.total_it)
 			writer.add_scalar('train_loss/sqrt_critic_loss3_2',torch.sqrt(critic_loss3_2),self.total_it)
-			writer.add_scalar('train_loss/reward_con',torch.mean(torch.abs(better_target_Q)) * 0.01,self.total_it)
+			writer.add_scalar('train_loss/targetQ_condition',torch.mean(torch.abs(better_target_Q)) * 0.01,self.total_it)
+			writer.add_scalar('train_loss/reward_condition',torch.mean(torch.abs(reward)),self.total_it)
 			writer.add_scalar('train_loss/max_reward',reward_max,self.total_it)	
-
+			#writer.add_scalar('train_loss/min_reward',reward_min,self.total_it)
 		if self.total_it % 1 == 0:
 			lr_tmp = self.actor_lr / (float(weights_actor_lr)+1.0)
 			self.actor_optimizer = self.lr_scheduler(self.actor_optimizer, lr_tmp)
@@ -311,7 +330,6 @@ class GRAC():
 				writer.add_scalar('train_critic/target_Q1/max', target_Q1.max(), self.total_it)
 				writer.add_scalar('train_critic/target_Q1/min', target_Q1.min(), self.total_it)
 				writer.add_scalar('train_critic/target_Q1/std', torch.std(target_Q1), self.total_it)
-
 				#target_Q2
 				writer.add_scalar('train_critic/target_Q2/mean', torch.mean(target_Q2), self.total_it)
 	
