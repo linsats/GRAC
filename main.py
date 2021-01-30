@@ -8,6 +8,7 @@ import utils
 import datetime
 
 from torch.utils.tensorboard import SummaryWriter
+from sliding_window import SlidingMin 
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
@@ -126,6 +127,10 @@ if __name__ == "__main__":
 	reward_min = np.inf
 	episode_step_max = 1
 	episode_step_min = 1000
+	
+	reward_min_buffer = SlidingMin(int(1e5))
+	episode_step_min_buffer = SlidingMin(int(1e3))
+	episode_step_min_buffer.insert(1000)
 
 	# writer = utils.WriterLoggerWrapper(result_folder, comment=file_name, max_timesteps=args.max_timesteps)
 	writer = SummaryWriter(log_dir=result_folder, comment=file_name)
@@ -157,13 +162,13 @@ if __name__ == "__main__":
 		next_state, reward, done, _ = env.step(action)
 		if reward > reward_max:
 			reward_max = reward
-		if reward < reward_min:
-			reward_min = reward
+		reward_min_buffer.insert(reward)
+		reward_min_buffer.get_min()	
 		writer.add_scalar('test/reward', reward, t+1)
 		done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
 		# Store data in replay buffer
-		replay_buffer.add(state, action, next_state, reward, done_bool, episode_timesteps, episode_step_min, episode_step_max)
+		replay_buffer.add(state, action, next_state, reward, done_bool)
 
 		state = next_state
 		episode_reward += reward
@@ -171,14 +176,14 @@ if __name__ == "__main__":
 
 		# Train agent after collecting sufficient data
 		if t >= args.start_timesteps:
-			policy.train(replay_buffer, args.batch_size, writer, 20.0, reward_max, episode_step_max, episode_step_min)#, replay_buffer.reward_min, episode_step_min)#reward_max - reward_min)
+			policy.train(replay_buffer, args.batch_size, writer, 20.0, reward_max, episode_step_max, reward_min_buffer.get_min(), episode_step_min_buffer.get_min())#, replay_buffer.reward_min, episode_step_min)#reward_max - reward_min)
 		if done: 
 			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
 			print("Total T: {} Episode Num: {} Episode T: {} Reward: {:.3f}".format(t+1, episode_num+1, episode_timesteps, episode_reward))
 			if episode_timesteps > episode_step_max:
 				episode_step_max = episode_timesteps
-			if episode_timesteps < episode_step_min:
-				episode_step_min = episode_timesteps
+			episode_step_min_buffer.insert(episode_timesteps)
+
 			# Reset environment
 			state, done = env.reset(), False
 			episode_reward = 0

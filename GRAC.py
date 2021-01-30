@@ -182,11 +182,11 @@ class GRAC():
 		self.actor.load_state_dict(torch.load(filename + "_actor"))
 		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
 
-	def train(self, replay_buffer, batch_size=100, writer=None, reward_range=20.0, reward_max=0, episode_step_max=100, episode_step_min=1):
+	def train(self, replay_buffer, batch_size=100, writer=None, reward_range=20.0, reward_max=0, episode_step_max=100, reward_min=0, episode_step_min=1):
 		self.total_it += 1
 		log_it = (self.total_it % self.log_freq == 0)
 		# Sample replay buffer 
-		state, action, next_state, reward, not_done, Q_min = replay_buffer.sample(batch_size)
+		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 		with torch.no_grad():
 			# Select action according to policy and add clipped noise
 			next_action = (
@@ -215,16 +215,20 @@ class GRAC():
 			target_Q1[target_Q1 > Q_max] = Q_max
 			target_Q2[target_Q2 > Q_max] = Q_max
 			
-			#if reward_min >= 0:
-			#	Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
-			#else:
-			#	Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
-			action_index_1 = (target_Q_final < Q_min).squeeze()
-			action_index_2 = (target_Q1 < Q_min).squeeze()
-			action_index_3 = (target_Q2 < Q_min).squeeze()
-			target_Q_final[action_index_1] = Q_min[action_index_1]
-			target_Q1[action_index_2] = Q_min[action_index_2]
-			target_Q2[action_index_3] = Q_min[action_index_3] 
+			if reward_min >= 0:
+				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
+			else:
+				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
+			#action_index_1 = (target_Q_final < Q_min).squeeze()
+			#action_index_2 = (target_Q1 < Q_min).squeeze()
+			#action_index_3 = (target_Q2 < Q_min).squeeze()
+			#target_Q_final[action_index_1] = Q_min[action_index_1]
+			#target_Q1[action_index_2] = Q_min[action_index_2]
+			#target_Q2[action_index_3] = Q_min[action_index_3] 
+			target_Q_final[target_Q_final < Q_min] = Q_min
+			target_Q1[target_Q1 < Q_min] = Q_min
+			target_Q2[target_Q2 < Q_min] = Q_min
+
 			next_action = better_next_action
 		# Get current Q estimates
 		current_Q1, current_Q2 = self.critic(state, action)
@@ -265,9 +269,10 @@ class GRAC():
 			writer.add_scalar('train_critic/third_loss_num', idi, self.total_it)
 			writer.add_scalar('train_critic/Q_max', Q_max, self.total_it)
 			writer.add_scalar('train_critic/episode_step_max',episode_step_max, self.total_it)
-			writer.add_scalar('train_critic/Q_min_max', torch.max(Q_min), self.total_it)
-			writer.add_scalar('train_critic/Q_min_mean', torch.mean(Q_min), self.total_it)
-			writer.add_scalar('train_critic/Q_min_min', torch.min(Q_min), self.total_it)
+			writer.add_scalar('train_critic/Q_min', Q_min, self.total_it)
+			#writer.add_scalar('train_critic/Q_min_max', torch.max(Q_min), self.total_it)
+			#writer.add_scalar('train_critic/Q_min_mean', torch.mean(Q_min), self.total_it)
+			#writer.add_scalar('train_critic/Q_min_min', torch.min(Q_min), self.total_it)
 			writer.add_scalar('train_critic/episode_step_min',episode_step_min, self.total_it)
 		if log_it:
 			writer.add_scalar('train_loss/loss2_1',critic_loss2_1,self.total_it)
