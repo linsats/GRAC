@@ -49,6 +49,7 @@ if __name__ == "__main__":
 	parser.add_argument("--load_model", default="")                 # Model load file name, "" doesn't load, "default" uses file_name
 	parser.add_argument('--use_expl_noise', action="store_true")
 	parser.add_argument('--log_freq',default=200,type=int)
+	parser.add_argument('--actor_lr_ratio',default=1.0, type=float)
 	parser.add_argument('--loss_decay',default=0.95)
 	parser.add_argument("--debug", action="store_true")
 	parser.add_argument("--comment", default="")
@@ -101,6 +102,7 @@ if __name__ == "__main__":
 		"discount": args.discount,
 		"log_freq":args.log_freq,
                 "loss_decay":args.loss_decay,
+		"actor_lr_ratio":args.actor_lr_ratio,
 		"device": device,
 	}
 
@@ -163,7 +165,6 @@ if __name__ == "__main__":
 		if reward > reward_max:
 			reward_max = reward
 		reward_min_buffer.insert(reward)
-		reward_min_buffer.get_min()	
 		writer.add_scalar('test/reward', reward, t+1)
 		done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
