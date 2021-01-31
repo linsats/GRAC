@@ -117,10 +117,10 @@ class Searcher():
 		self.max_action = max_action
 		self.device = device
 
-	def search(self, state, action_init, critic, batch_size=None, n_iter=2, action_bound=True):
+	def search(self, state, action_init, critic, batch_size=None, n_iter=2, action_bound=True, clip=0.1):
 		if batch_size is None:
 			batch_size = self.batch_size
-		cem = CEM(self.action_dim, action_init, batch_size, self.sigma_init, self.clip, self.pop_size, self.damp, self.damp_limit, self.parents, device=self.device)
+		cem = CEM(num_params=self.action_dim, mu_init=action_init, batch_size=batch_size, sigma_init=self.sigma_init, clip=clip, pop_size=self.pop_size, damp=self.damp, damp_limit=self.damp_limit, parents=self.parents, device=self.device)
 		with torch.no_grad():
 			for iter in range(n_iter):
 				actions = cem.ask(self.pop_size)
