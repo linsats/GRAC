@@ -106,6 +106,7 @@ class GRAC():
                 critic_lr = 3e-4,
                 loss_decay = 0.95,
                 log_freq = 200,
+		actor_lr_ratio =1.0,
 		device=torch.device('cuda'),
 	):
 		self.action_dim = action_dim
@@ -118,6 +119,7 @@ class GRAC():
 		self.actor_lr = actor_lr # here is actor lr is not the real actor learning rate
 		self.critic_lr = critic_lr
 		self.loss_decay = loss_decay
+		self.actor_lr_ratio = actor_lr_ratio
 
 		self.actor = Actor(state_dim, action_dim, max_action).to(device)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
@@ -286,7 +288,7 @@ class GRAC():
 			writer.add_scalar('train_loss/max_reward',reward_max,self.total_it)	
 			#writer.add_scalar('train_loss/min_reward',reward_min,self.total_it)
 		if self.total_it % 1 == 0:
-			lr_tmp = self.actor_lr / (float(weights_actor_lr)+1.0)
+			lr_tmp = self.actor_lr / (float(weights_actor_lr)+1.0) * self.actor_lr_ratio
 			self.actor_optimizer = self.lr_scheduler(self.actor_optimizer, lr_tmp)
 
 			# Compute actor loss
