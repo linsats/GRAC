@@ -22,8 +22,6 @@ class SlidingMin:
                 self.cur_min_val = self.arr[self.cur_min_idx]
 
     def get_min(self):
-        if self.ct == 0:
-            return None
         return self.cur_min_val
 
 if __name__ == '__main__':
