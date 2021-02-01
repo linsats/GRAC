@@ -188,7 +188,7 @@ class GRAC():
 	def train(self, replay_buffer, batch_size=100, writer=None, reward_range=20.0, reward_max=0, episode_step_max=100, reward_min=0, episode_step_min=1):
 		self.total_it += 1
 		log_it = (self.total_it % self.log_freq == 0)
-		ratio_it = max(1.1 - self.total_it/float(self.max_timesteps),0.1)
+		ratio_it = max(1.0 - self.total_it/float(self.max_timesteps), 0.1)
 		if log_it:
 			writer.add_scalar('train_critic/ratio_it', ratio_it, self.total_it)
 		cem_clip = self.cem_clip_init * ratio_it
@@ -226,12 +226,6 @@ class GRAC():
 				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
 			else:
 				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
-			#action_index_1 = (target_Q_final < Q_min).squeeze()
-			#action_index_2 = (target_Q1 < Q_min).squeeze()
-			#action_index_3 = (target_Q2 < Q_min).squeeze()
-			#target_Q_final[action_index_1] = Q_min[action_index_1]
-			#target_Q1[action_index_2] = Q_min[action_index_2]
-			#target_Q2[action_index_3] = Q_min[action_index_3] 
 			target_Q_final[target_Q_final < Q_min] = Q_min
 			target_Q1[target_Q1 < Q_min] = Q_min
 			target_Q2[target_Q2 < Q_min] = Q_min
@@ -268,6 +262,8 @@ class GRAC():
 			self.update_critic(critic_loss3)
 			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(better_target_Q)) * 0.01, torch.mean(torch.abs(reward))) and torch.sqrt(critic_loss3_2) < reward_max * 1.0:
                                         break
+			if idi > 20:
+				break
 		critic_loss = F.mse_loss(current_Q1, target_Q_final) + F.mse_loss(current_Q2, target_Q_final)
 		weights_actor_lr = critic_loss.detach()
 
