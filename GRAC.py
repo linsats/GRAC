@@ -188,7 +188,9 @@ class GRAC():
 	def train(self, replay_buffer, batch_size=100, writer=None, reward_range=20.0, reward_max=0, episode_step_max=100, reward_min=0, episode_step_min=1):
 		self.total_it += 1
 		log_it = (self.total_it % self.log_freq == 0)
-		ratio_it = (1.1 - self.total_it/float(self.max_timesteps))
+		ratio_it = max(1.1 - self.total_it/float(self.max_timesteps),0.1)
+		if log_it:
+			writer.add_scalar('train_critic/ratio_it', ratio_it, self.total_it)
 		cem_clip = self.cem_clip_init * ratio_it
 		# Sample replay buffer 
 		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
