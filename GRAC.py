@@ -262,7 +262,7 @@ class GRAC():
 			self.update_critic(critic_loss3)
 			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(better_target_Q)) * 0.01, torch.mean(torch.abs(reward))) and torch.sqrt(critic_loss3_2) < reward_max * 1.0:
                                         break
-			if idi > 20:
+			if idi > 50:
 				break
 		critic_loss = F.mse_loss(current_Q1, target_Q_final) + F.mse_loss(current_Q2, target_Q_final)
 		weights_actor_lr = critic_loss.detach()
