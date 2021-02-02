@@ -100,15 +100,22 @@ if __name__ == "__main__":
 		"max_action": max_action,
 		"batch_size": args.batch_size,
 		"discount": args.discount,
-		"log_freq":args.log_freq,
-                "loss_decay":args.loss_decay,
-		"actor_lr_ratio":args.actor_lr_ratio,
+		"log_freq": args.log_freq,
+                "loss_decay": args.loss_decay,
+		"actor_lr_ratio": args.actor_lr_ratio,
+		"max_timesteps": args.max_timesteps,
 		"device": device,
 	}
 
 	# Initialize policy
-	if "GRAC" in args.policy:
+	if "GRAC" == args.policy:
 		# Target policy smoothing is scaled wrt the action scale
+		GRAC = __import__(args.policy)
+		policy = GRAC.GRAC(**kwargs)
+	if "GRAC_simple" ==  args.policy:
+		GRAC = __import__(args.policy)
+		policy = GRAC.GRAC(**kwargs)  
+	if "GRAC_simple_v2" ==  args.policy:
 		GRAC = __import__(args.policy)
 		policy = GRAC.GRAC(**kwargs)
 

@@ -130,6 +130,7 @@ class GRAC():
 		cem_sigma = 1e-2
 		cem_clip = 0.5 * max_action
 		self.cem_clip_init = cem_clip
+		self.cem_clip = cem_clip
 		self.searcher = Searcher(action_dim, max_action, device=device, sigma_init=cem_sigma, clip=cem_clip, batch_size=batch_size)
 		self.action_dim = float(action_dim)
 		self.log_freq = log_freq
@@ -138,14 +139,14 @@ class GRAC():
 		self.selection_action_coef = 1.0
 
 
-	def select_action(self, state, writer=None, test=False, clip=0.5):
+	def select_action(self, state, writer=None, test=False):
 		state = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
 		if test is False:
 			with torch.no_grad():
 				action = self.actor(state)
 				ceof = self.selection_action_coef - min(self.selection_action_coef-0.05, float(self.total_it) * 10.0/float(self.max_timesteps))
 				if np.random.uniform(0,1) < ceof:
-					better_action = self.searcher.search(state, action, self.critic.Q2, batch_size=1, clip=clip)
+					better_action = self.searcher.search(state, action, self.critic.Q2, batch_size=1, clip=self.cem_clip)
 	
 					Q1, Q2 = self.critic(state, action)
 					Q = torch.min(Q1, Q2)
@@ -191,7 +192,7 @@ class GRAC():
 		ratio_it = max(1.0 - self.total_it/float(self.max_timesteps), 0.1)
 		if log_it:
 			writer.add_scalar('train_critic/ratio_it', ratio_it, self.total_it)
-		cem_clip = self.cem_clip_init * ratio_it
+		self.cem_clip = self.cem_clip_init * ratio_it
 		# Sample replay buffer 
 		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 		with torch.no_grad():
@@ -199,7 +200,7 @@ class GRAC():
 			next_action = (
 				self.actor(next_state)
 			).clamp(-self.max_action, self.max_action)
-			better_next_action = self.searcher.search(next_state, next_action, self.critic.Q2, clip=cem_clip)
+			better_next_action = self.searcher.search(next_state, next_action, self.critic.Q2, clip=self.cem_clip)
 
 			target_Q1, target_Q2 = self.critic(next_state, next_action)
 			target_Q = torch.min(target_Q1, target_Q2)
@@ -273,7 +274,7 @@ class GRAC():
 			writer.add_scalar('train_critic/Q_max', Q_max, self.total_it)
 			writer.add_scalar('train_critic/episode_step_max',episode_step_max, self.total_it)
 			writer.add_scalar('train_critic/Q_min', Q_min, self.total_it)
-			writer.add_scalar('train_critic/cem_clip', cem_clip, self.total_it)
+			writer.add_scalar('train_critic/cem_clip', self.cem_clip, self.total_it)
 			#writer.add_scalar('train_critic/Q_min_mean', torch.mean(Q_min), self.total_it)
 			#writer.add_scalar('train_critic/Q_min_min', torch.min(Q_min), self.total_it)
 			writer.add_scalar('train_critic/episode_step_min',episode_step_min, self.total_it)
@@ -297,7 +298,7 @@ class GRAC():
 			q_actor_action = self.critic.Q1(state, actor_action)
 			m = Normal(action_mean, action_sigma)
 
-			better_action = self.searcher.search(state, actor_action, self.critic.Q1, batch_size=batch_size, clip=cem_clip)#####
+			better_action = self.searcher.search(state, actor_action, self.critic.Q1, batch_size=batch_size, clip=self.cem_clip)#####
 			q_better_action = self.critic.Q1(state, better_action)
 			log_prob_better_action = m.log_prob(better_action).sum(1,keepdim=True)
 
