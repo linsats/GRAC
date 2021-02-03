@@ -352,10 +352,13 @@ class GRAC():
 				writer.add_scalar('train_critic/current_Q2/mean', current_Q2.mean(), self.total_it)
 
 	def save(self, filename):
-		super().save(filename)
+		torch.save(self.critic.state_dict(), filename + "_critic")
+		torch.save(self.critic_optimizer.state_dict(), filename + "_critic_optimizer")
+		torch.save(self.actor.state_dict(), filename + "_actor")
+		torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
 
 	def load(self, filename):
-		super().load(filename)
-
-	def make_Q_contour(self, state, save_folder, base_action):
-		super().make_Q_contour(state, save_folder, base_action)
+		self.critic.load_state_dict(torch.load(filename + "_critic"))
+		self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
+		self.actor.load_state_dict(torch.load(filename + "_actor"))
+		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))

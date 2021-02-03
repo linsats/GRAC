@@ -207,9 +207,9 @@ if __name__ == "__main__":
 			writer.add_scalar('test/avg_return', evaluation, t+1)
 			np.save("{}/evaluations".format(result_folder), evaluations)
 
-		#if (t + 1) % 5000 == 0: 
-	#		args.save_model: policy.save("./{}/models/iter_{}_model".format(result_folder, t + 1))
-			# replay_buffer.save(result_folder)
+		if (t + 1) % 5000 == 0: 
+			args.save_model: policy.save("./{}/models/iter_{}_model".format(result_folder, t + 1))
+			#replay_buffer.save(result_folder)
 		
 		# save to txt
 		# if (t + 1) % 50000 == 0:
