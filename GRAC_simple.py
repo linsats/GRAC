@@ -172,18 +172,17 @@ class GRAC():
 				self.actor(next_state)
 			).clamp(-self.max_action, self.max_action)
 			target_Q1 = self.critic(next_state, next_action)
-			target_Q_final = reward + not_done * self.discount * target_Q1
-
 			Q_max = reward_max / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
-			target_Q_final[target_Q_final > Q_max] = Q_max
 			target_Q1[target_Q1 > Q_max] = Q_max
-			
 			if reward_min >= 0:
 				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
 			else:
 				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
-			target_Q_final[target_Q_final < Q_min] = Q_min
 			target_Q1[target_Q1 < Q_min] = Q_min
+
+			target_Q_final = reward + not_done * self.discount * target_Q1
+			target_Q_final[target_Q_final < Q_min] = Q_min
+			target_Q_final[target_Q_final > Q_max] = Q_max
 
 		# Get current Q estimates
 		current_Q1 = self.critic(state, action)
