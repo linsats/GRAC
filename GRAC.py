@@ -214,24 +214,26 @@ class GRAC():
 
 			better_target_Q = torch.max(better_target_Q, target_Q)
 
-			target_Q_final = reward + not_done * self.discount * better_target_Q
 			target_Q1 = better_target_Q1
 			target_Q2 = better_target_Q2
 
 			Q_max = reward_max / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
-			target_Q_final[target_Q_final > Q_max] = Q_max
 			target_Q1[target_Q1 > Q_max] = Q_max
 			target_Q2[target_Q2 > Q_max] = Q_max
-			
+			better_target_Q[better_target_Q > Q_max] = Q_max
 			if reward_min >= 0:
 				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
 			else:
 				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
-			target_Q_final[target_Q_final < Q_min] = Q_min
 			target_Q1[target_Q1 < Q_min] = Q_min
 			target_Q2[target_Q2 < Q_min] = Q_min
+			better_target_Q[better_target_Q < Q_min] = Q_min
 
+			target_Q_final = reward + not_done * self.discount * better_target_Q
+			target_Q_final[target_Q_final > Q_max] = Q_max
+			target_Q_final[target_Q_final < Q_min] = Q_min
 			next_action = better_next_action
+
 		# Get current Q estimates
 		current_Q1, current_Q2 = self.critic(state, action)
 
