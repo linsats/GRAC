@@ -144,20 +144,7 @@ class GRAC():
 		if test is False:
 			with torch.no_grad():
 				action = self.actor(state)
-				ceof = self.selection_action_coef - min(self.selection_action_coef-0.05, float(self.total_it) * 10.0/float(self.max_timesteps))
-				if np.random.uniform(0,1) < ceof:
-					better_action = self.searcher.search(state, action, self.critic.Q2, batch_size=1, clip=self.cem_clip)
-	
-					Q1, Q2 = self.critic(state, action)
-					Q = torch.min(Q1, Q2)
-	
-					better_Q1, better_Q2 = self.critic(state, better_action)
-					better_Q = torch.min(better_Q1, better_Q2)
-	
-					action_index = (Q > better_Q).squeeze()
-					better_action[action_index] = action[action_index]
-				else:
-					better_action = action
+				better_action = action
 			return better_action.cpu().data.numpy().flatten()
 
 		else:
@@ -200,12 +187,10 @@ class GRAC():
 			next_action = (
 				self.actor(next_state)
 			).clamp(-self.max_action, self.max_action)
-			better_next_action = self.searcher.search(next_state, next_action, self.critic.Q2, clip=self.cem_clip)
-
+			better_next_action, better_target_Q2 = self.searcher.search(next_state, next_action, self.critic.Q2, clip=self.cem_clip, n_iter=1)
 			target_Q1, target_Q2 = self.critic(next_state, next_action)
 			target_Q = torch.min(target_Q1, target_Q2)
-
-			better_target_Q1, better_target_Q2 = self.critic(next_state, better_next_action)
+			better_target_Q1 = self.critic.Q1(next_state, better_next_action)
 			better_target_Q = torch.min(better_target_Q1, better_target_Q2)
 
 			action_index = (target_Q > better_target_Q).squeeze()
@@ -298,9 +283,9 @@ class GRAC():
 			# Compute actor loss
 			actor_action, log_prob, action_mean, action_sigma = self.actor.forward_all(state)
 			q_actor_action = self.critic.Q1(state, actor_action)
+			
 			m = Normal(action_mean, action_sigma)
-
-			better_action = self.searcher.search(state, actor_action, self.critic.Q1, batch_size=batch_size, clip=self.cem_clip)#####
+			better_action, _ = self.searcher.search(state, actor_action, self.critic.Q1, batch_size=batch_size, clip=self.cem_clip)
 			q_better_action = self.critic.Q1(state, better_action)
 			log_prob_better_action = m.log_prob(better_action).sum(1,keepdim=True)
 

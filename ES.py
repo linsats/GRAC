@@ -135,6 +135,5 @@ class Searcher():
 
 					action_index = (best_Q < ori_Q).squeeze()
 					best_action[action_index] = action_init[action_index]
-					# best_Q = torch.max(ori_Q, best_Q)
-
-					return best_action
+					best_Q = torch.max(ori_Q, best_Q)
+					return best_action, best_Q
