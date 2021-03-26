@@ -49,7 +49,7 @@ if __name__ == "__main__":
 	parser.add_argument("--load_model", default="")                 # Model load file name, "" doesn't load, "default" uses file_name
 	parser.add_argument('--use_expl_noise', action="store_true")
 	parser.add_argument('--log_freq',default=200,type=int)
-	parser.add_argument('--actor_lr_ratio',default=1.0, type=float)
+	parser.add_argument('--cem_loss_coef',default=1.0, type=float)
 	parser.add_argument('--loss_decay',default=0.95)
 	parser.add_argument("--debug", action="store_true")
 	parser.add_argument("--comment", default="")
@@ -102,7 +102,7 @@ if __name__ == "__main__":
 		"discount": args.discount,
 		"log_freq": args.log_freq,
                 "loss_decay": args.loss_decay,
-		"actor_lr_ratio": args.actor_lr_ratio,
+		"cem_loss_coef": args.cem_loss_coef,
 		"max_timesteps": args.max_timesteps,
 		"device": device,
 	}
