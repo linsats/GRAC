@@ -47,6 +47,16 @@ class Actor(nn.Module):
 		action = action.clamp(-self.max_action, self.max_action)
 		return action, log_prob, mean, sigma
 
+	def forward_sample(self, state, *args):
+		a = F.relu(self.l1(state))
+		a = F.relu(self.l2(a))
+		mean = self.max_action * torch.tanh(self.l3_mean(a))
+		sigma = F.softplus(self.l3_sigma(a)) + 0.001
+		normal = Normal(mean, sigma)
+		action1 = normal.rsample().clamp(-self.max_action, self.max_action)
+		action2 = normal.rsample().clamp(-self.max_action, self.max_action)
+		return action1, action2
+
 class Critic(nn.Module):
 	def __init__(self, state_dim, action_dim):
 		super(Critic, self).__init__()
@@ -165,15 +175,17 @@ class GRAC():
 		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 		with torch.no_grad():
 			# Select action according to policy and add clipped noise
-			better_next_action, log_prob, next_action_mean, next_action_sigma = self.actor.forward_all(state)
+			next_action1, next_action2 = self.actor.forward_sample(next_state)
+			better_next_action = next_action1
+			#better_next_action, log_prob, next_action_mean, next_action_sigma = self.actor.forward_all(state)
 			#better_next_action,_ = self.searcher.search(next_state, next_action, self.critic.Q2, clip=self.cem_clip)
 
-			target_Q1 = self.critic(next_state, better_next_action)
-			target_Q2 = self.critic(next_state, next_action_mean)
+			target_Q1 = self.critic(next_state, next_action1)
+			target_Q2 = self.critic(next_state, next_action2)
 			target_Q = torch.min(target_Q1, target_Q2)
 
 			action_index = (target_Q1 > target_Q2).squeeze()
-			better_next_action[action_index] = next_action_mean[action_index]
+			better_next_action[action_index] = next_action2[action_index]
 			better_target_Q = self.critic(next_state, better_next_action)
 
 			target_Q1 = better_target_Q
