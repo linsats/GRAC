@@ -97,7 +97,7 @@ class GRAC():
                 critic_lr = 3e-4,
                 loss_decay = 0.95,
                 log_freq = 200,
-		actor_lr_ratio =1.0,
+		cem_loss_coef =1.0,
 		device=torch.device('cuda'),
 	):
 		self.action_dim = action_dim
@@ -110,7 +110,6 @@ class GRAC():
 		self.actor_lr = actor_lr # here is actor lr is not the real actor learning rate
 		self.critic_lr = critic_lr
 		self.loss_decay = loss_decay
-		self.actor_lr_ratio = actor_lr_ratio
 
 		self.actor = Actor(state_dim, action_dim, max_action).to(device)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
@@ -126,16 +125,13 @@ class GRAC():
 		self.action_dim = float(action_dim)
 		self.log_freq = log_freq
 		self.max_timesteps = max_timesteps
-		self.cem_loss_coef = 1.0/float(self.action_dim)
-		self.selection_action_coef = 1.0
-
+		self.cem_loss_coef = cem_loss_coef/float(self.action_dim)
 
 	def select_action(self, state, writer=None, test=False):
 		state = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
 		if test is False:
 			with torch.no_grad():
 				action = self.actor(state)
-				ceof = self.selection_action_coef - min(self.selection_action_coef-0.05, float(self.total_it) * 10.0/float(self.max_timesteps))
 				better_action = action
 			return better_action.cpu().data.numpy().flatten()
 		else:
@@ -273,11 +269,17 @@ class GRAC():
 
 			better_action,_ = self.searcher.search(state, actor_action, self.critic.Q1, batch_size=batch_size, clip=self.cem_clip)#####
 			q_better_action = self.critic.Q1(state, better_action)
+			
+			q_better_action[q_better_action > Q_max] = Q_max
+			q_better_action[q_better_action < Q_min] = Q_min
+			q_actor_action[q_actor_action > Q_max] = Q_max
+			q_actor_action[q_actor_action < Q_min] = Q_min
+
 			log_prob_better_action = m.log_prob(better_action).sum(1,keepdim=True)
 
 			adv = (q_better_action - q_actor_action).detach()
-			adv = torch.max(adv,torch.zeros_like(adv))
-			cem_loss = log_prob_better_action * torch.min(reward_range * torch.ones_like(adv) * ratio_it, adv)
+			#adv = torch.max(adv,torch.zeros_like(adv))
+			cem_loss = log_prob_better_action * adv#torch.min(reward_range * torch.ones_like(adv) * ratio_it, adv)
 			actor_loss = -(cem_loss * self.cem_loss_coef + q_actor_action).mean()
 
 			# Optimize the actor 
