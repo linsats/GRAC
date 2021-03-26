@@ -175,37 +175,37 @@ class GRAC():
 		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 		with torch.no_grad():
 			# Select action according to policy and add clipped noise
-			next_action1, next_action2 = self.actor.forward_sample(next_state)
-			better_next_action = next_action1
-			#better_next_action, log_prob, next_action_mean, next_action_sigma = self.actor.forward_all(state)
+			#next_action1, next_action2 = self.actor.forward_sample(next_state)
+			#better_next_action = next_action1
+			next_action, log_prob, next_action_mean, next_action_sigma = self.actor.forward_all(next_state)
 			#better_next_action,_ = self.searcher.search(next_state, next_action, self.critic.Q2, clip=self.cem_clip)
+			next_action2 = next_action_mean	
+			next_action1 = next_action
+			#better_next_action = next_action1
 
 			target_Q1 = self.critic(next_state, next_action1)
 			target_Q2 = self.critic(next_state, next_action2)
 			target_Q = torch.min(target_Q1, target_Q2)
 
-			action_index = (target_Q1 > target_Q2).squeeze()
-			better_next_action[action_index] = next_action2[action_index]
-			better_target_Q = self.critic(next_state, better_next_action)
-
-			target_Q1 = better_target_Q
+			#action_index = (target_Q1 > target_Q2).squeeze()
+			#better_next_action[action_index] = next_action2[action_index]
+			#better_target_Q = self.critic(next_state, better_next_action)
+			#target_Q1 = target_Q
 
 			Q_max = reward_max / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
-			target_Q1[target_Q1 > Q_max] = Q_max
-			better_target_Q[better_target_Q > Q_max] = Q_max
+			target_Q[target_Q > Q_max] = Q_max
 			
 			if reward_min >= 0:
 				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
 			else:
 				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
-			target_Q1[target_Q1 < Q_min] = Q_min
-			better_target_Q[better_target_Q < Q_min] = Q_min
-
-			target_Q_final = reward + not_done * self.discount * better_target_Q
+			target_Q[target_Q < Q_min] = Q_min
+			
+			target_Q_final = reward + not_done * self.discount * target_Q
 			target_Q_final[target_Q_final > Q_max] = Q_max
 			target_Q_final[target_Q_final < Q_min] = Q_min
-			next_action = better_next_action
 
+			target_Q1 = target_Q
 		# Get current Q estimates
 		current_Q1 = self.critic(state, action)
 
@@ -235,7 +235,7 @@ class GRAC():
 			critic_loss3_2 = F.mse_loss(target_Q1_, target_Q1)
 			critic_loss3 = critic_loss3_1 + critic_loss3_2 * weight_loss
 			self.update_critic(critic_loss3)
-			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(target_Q)) * 0.01, torch.mean(torch.abs(reward))) and torch.sqrt(critic_loss3_2) < reward_max * 1.0:
+			if critic_loss3_1 < critic_loss * self.loss_decay and critic_loss3_1 < critic_loss2_1 * self.loss_decay:# and torch.sqrt(critic_loss3_2) < torch.max(torch.mean(torch.abs(target_Q)) * 0.01, torch.mean(torch.abs(reward))):
                                         break
 			if idi > 50:
 				break
@@ -258,13 +258,13 @@ class GRAC():
 			writer.add_scalar('train_loss/loss3_2_r',critic_loss3_2/critic_loss2_2,self.total_it)
 			writer.add_scalar('train_loss/loss3_1_r_loss',critic_loss3_1/critic_loss,self.total_it)
 			writer.add_scalar('train_loss/sqrt_critic_loss3_2',torch.sqrt(critic_loss3_2),self.total_it)
-			writer.add_scalar('train_loss/targetQ_condition',torch.mean(torch.abs(better_target_Q)) * 0.01,self.total_it)
+			writer.add_scalar('train_loss/targetQ_condition',torch.mean(torch.abs(target_Q)) * 0.01,self.total_it)
 			writer.add_scalar('train_loss/reward_condition',torch.mean(torch.abs(reward)),self.total_it)
 			writer.add_scalar('train_loss/max_reward',reward_max,self.total_it)	
 			#writer.add_scalar('train_loss/min_reward',reward_min,self.total_it)
 		if self.total_it % 1 == 0:
-			lr_tmp = self.actor_lr / (float(weights_actor_lr)+1.0) * self.actor_lr_ratio
-			self.actor_optimizer = self.lr_scheduler(self.actor_optimizer, lr_tmp)
+			#lr_tmp = self.actor_lr / (float(weights_actor_lr)+1.0) * self.actor_lr_ratio
+			#self.actor_optimizer = self.lr_scheduler(self.actor_optimizer, lr_tmp)
 
 			# Compute actor loss
 			actor_action, log_prob, action_mean, action_sigma = self.actor.forward_all(state)
@@ -286,7 +286,7 @@ class GRAC():
 			self.actor_optimizer.zero_grad()
 			actor_loss.backward()
 			self.actor_optimizer.step()
-			self.actor_optimizer = self.lr_scheduler(self.actor_optimizer, self.actor_lr)
+			#self.actor_optimizer = self.lr_scheduler(self.actor_optimizer, self.actor_lr)
 
 		if log_it:
 			with torch.no_grad():
