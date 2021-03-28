@@ -115,7 +115,10 @@ if __name__ == "__main__":
 	if "GRAC_single" ==  args.policy:
 		GRAC = __import__(args.policy)
 		policy = GRAC.GRAC(**kwargs)  
-	if "GRAC_min" ==  args.policy:
+	if "GRAC_single_v2" ==  args.policy:
+		GRAC = __import__(args.policy)
+		policy = GRAC.GRAC(**kwargs)
+	if "GRAC_single_v3" ==  args.policy:
 		GRAC = __import__(args.policy)
 		policy = GRAC.GRAC(**kwargs)
 	if args.load_model != "":
