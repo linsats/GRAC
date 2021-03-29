@@ -47,7 +47,7 @@ class Actor(nn.Module):
 		action = action.clamp(-self.max_action, self.max_action)
 		return action, log_prob, mean, sigma
 
-	def forward_sample(self, state, *args):
+	def forward_all_sample(self, state, *args):
 		a = F.relu(self.l1(state))
 		a = F.relu(self.l2(a))
 		mean = self.max_action * torch.tanh(self.l3_mean(a))
@@ -55,7 +55,7 @@ class Actor(nn.Module):
 		normal = Normal(mean, sigma)
 		action1 = normal.rsample().clamp(-self.max_action, self.max_action)
 		action2 = normal.rsample().clamp(-self.max_action, self.max_action)
-		return action1, action2
+		return action1, action2, mean, sigma
 
 class Critic(nn.Module):
 	def __init__(self, state_dim, action_dim):
@@ -170,31 +170,40 @@ class GRAC():
 		# Sample replay buffer 
 		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 		with torch.no_grad():
+			Q_max = reward_max / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
+			if reward_min >= 0:
+				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
+			else:
+				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
+
 			# Select action according to policy and add clipped noise
-			#next_action1, next_action2 = self.actor.forward_sample(next_state)
 			#better_next_action = next_action1
-			next_action, log_prob, next_action_mean, next_action_sigma = self.actor.forward_all(next_state)
+			next_action1, next_action2, next_action_mean, next_action_sigma = self.actor.forward_all_sample(next_state)
+			#next_action1, next_action2 = self.actor.forward_sample(next_state)
 			#better_next_action,_ = self.searcher.search(next_state, next_action, self.critic.Q2, clip=self.cem_clip)
-			next_action2 = next_action_mean	
-			next_action1 = next_action
+			#next_action2 = next_action_mean	
+			#next_action1 = next_action
 			#better_next_action = next_action1
 
 			target_Q1 = self.critic(next_state, next_action1)
 			target_Q2 = self.critic(next_state, next_action2)
-			target_Q = torch.min(target_Q1, target_Q2)
+			target_mean = self.critic(next_state, next_action_mean)
+			target_Q1[target_Q1 > Q_max] = Q_max
+			target_Q1[target_Q1 < Q_min] = Q_min
+			target_Q2[target_Q2 > Q_max] = Q_max
+			target_Q2[target_Q2 < Q_min] = Q_min
+			target_mean[target_mean > Q_max] = Q_max
+			target_mean[target_mean < Q_min] = Q_min
+
+			target_Q = torch.max(torch.min(target_Q1, target_mean), torch.min(target_Q2, target_mean))
+			target_Q_diff = target_Q1 - target_mean
 
 			#action_index = (target_Q1 > target_Q2).squeeze()
 			#better_next_action[action_index] = next_action2[action_index]
 			#better_target_Q = self.critic(next_state, better_next_action)
 			#target_Q1 = target_Q
 
-			Q_max = reward_max / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
 			target_Q[target_Q > Q_max] = Q_max
-			
-			if reward_min >= 0:
-				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_min))
-			else:
-				Q_min = reward_min / (1 - self.discount) * (1 - self.discount ** int(episode_step_max))
 			target_Q[target_Q < Q_min] = Q_min
 			
 			target_Q_final = reward + not_done * self.discount * target_Q
@@ -202,6 +211,7 @@ class GRAC():
 			target_Q_final[target_Q_final < Q_min] = Q_min
 
 			target_Q1 = target_Q
+			next_action = next_action_mean
 		# Get current Q estimates
 		current_Q1 = self.critic(state, action)
 
@@ -278,7 +288,7 @@ class GRAC():
 			log_prob_better_action = m.log_prob(better_action).sum(1,keepdim=True)
 
 			adv = (q_better_action - q_actor_action).detach()
-			#adv = torch.max(adv,torch.zeros_like(adv))
+			adv = torch.min(adv,torch.ones_like(adv) * Q_max * 0.05)
 			cem_loss = log_prob_better_action * adv#torch.min(reward_range * torch.ones_like(adv) * ratio_it, adv)
 			actor_loss = -(cem_loss * self.cem_loss_coef + q_actor_action).mean()
 
@@ -307,6 +317,20 @@ class GRAC():
 				writer.add_scalar('train_critic/current_Q1/std', torch.std(current_Q1), self.total_it)
 				writer.add_scalar('train_critic/current_Q1/max', current_Q1.max(), self.total_it)
 				writer.add_scalar('train_critic/current_Q1/min', current_Q1.min(), self.total_it)
+
+				# advantage 
+				writer.add_scalar('train_critic/adv/mean', adv.mean(), self.total_it)
+				writer.add_scalar('train_critic/adv/std', torch.std(adv), self.total_it)
+				writer.add_scalar('train_critic/adv/max', adv.max(), self.total_it)
+				writer.add_scalar('train_critic/adv/min', adv.min(), self.total_it)
+
+				# targetQ_diff
+				writer.add_scalar('train_critic/target_Q_diff/mean', target_Q_diff.mean(), self.total_it)
+				writer.add_scalar('train_critic/target_Q_diff/std', torch.std(target_Q_diff), self.total_it)
+				writer.add_scalar('train_critic/target_Q_diff/max', target_Q_diff.max(), self.total_it)
+				writer.add_scalar('train_critic/target_Q_diff/min', target_Q_diff.min(), self.total_it)
+
+
 	
 	def save(self, filename):
 		torch.save(self.critic.state_dict(), filename + "_critic")
