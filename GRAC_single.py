@@ -55,7 +55,13 @@ class Actor(nn.Module):
 		normal = Normal(mean, sigma)
 		action1 = normal.rsample().clamp(-self.max_action, self.max_action)
 		action2 = normal.rsample().clamp(-self.max_action, self.max_action)
-		return action1, action2, mean, sigma
+		prob1 = normal.log_prob(action1).sum(1,keepdim=True)
+		prob2 = normal.log_prob(action2).sum(1,keepdim=True)
+		probm = normal.log_prob(mean).sum(1,keepdim=True)
+		prob1 = torch.exp(prob1)
+		prob2 = torch.exp(prob2)
+		probm = torch.exp(probm)
+		return action1, action2, mean, sigma, prob1, prob2, probm
 
 class Critic(nn.Module):
 	def __init__(self, state_dim, action_dim):
@@ -178,7 +184,14 @@ class GRAC():
 
 			# Select action according to policy and add clipped noise
 			#better_next_action = next_action1
-			next_action1, next_action2, next_action_mean, next_action_sigma = self.actor.forward_all_sample(next_state)
+			next_action1, next_action2, next_action_mean, next_action_sigma, prob1, prob2, probm= self.actor.forward_all_sample(next_state)
+			coef1 = prob1 / (prob1 + prob2 + probm)
+			coef2 = prob2 / (prob1 + prob2 + probm)
+			coefm = probm / (prob1 + prob2 + probm)
+			#print("next_action1",next_action1)
+			#print("next_action2",next_action2)
+			#print("prob1",prob1)
+			#print("prob2",prob2)
 			#next_action1, next_action2 = self.actor.forward_sample(next_state)
 			#better_next_action,_ = self.searcher.search(next_state, next_action, self.critic.Q2, clip=self.cem_clip)
 			#next_action2 = next_action_mean	
@@ -195,6 +208,8 @@ class GRAC():
 			target_mean[target_mean > Q_max] = Q_max
 			target_mean[target_mean < Q_min] = Q_min
 
+			#target_Q_w = target_Q1 * coef1 + target_Q2 * coef2 + target_mean * coefm
+			#target_Q = torch.min(target_Q_w, target_mean)
 			target_Q = torch.max(torch.min(target_Q1, target_mean), torch.min(target_Q2, target_mean))
 			target_Q_mean_diff = target_mean - target_Q
 			target_Q1_diff = target_Q1 - target_Q
