@@ -196,8 +196,9 @@ class GRAC():
 			target_mean[target_mean < Q_min] = Q_min
 
 			target_Q = torch.max(torch.min(target_Q1, target_mean), torch.min(target_Q2, target_mean))
-			target_Q_diff = target_Q1 - target_mean
-
+			target_Q_mean_diff = target_mean - target_Q
+			target_Q1_diff = target_Q1 - target_Q
+			target_Q2_diff = target_Q2 - target_Q	
 			#action_index = (target_Q1 > target_Q2).squeeze()
 			#better_next_action[action_index] = next_action2[action_index]
 			#better_target_Q = self.critic(next_state, better_next_action)
@@ -264,8 +265,6 @@ class GRAC():
 			writer.add_scalar('train_loss/loss3_2_r',critic_loss3_2/critic_loss2_2,self.total_it)
 			writer.add_scalar('train_loss/loss3_1_r_loss',critic_loss3_1/critic_loss,self.total_it)
 			writer.add_scalar('train_loss/sqrt_critic_loss3_2',torch.sqrt(critic_loss3_2),self.total_it)
-			writer.add_scalar('train_loss/targetQ_condition',torch.mean(torch.abs(target_Q)) * 0.01,self.total_it)
-			writer.add_scalar('train_loss/reward_condition',torch.mean(torch.abs(reward)),self.total_it)
 			writer.add_scalar('train_loss/max_reward',reward_max,self.total_it)	
 			#writer.add_scalar('train_loss/min_reward',reward_min,self.total_it)
 		if self.total_it % 1 == 0:
@@ -324,11 +323,24 @@ class GRAC():
 				writer.add_scalar('train_critic/adv/max', adv.max(), self.total_it)
 				writer.add_scalar('train_critic/adv/min', adv.min(), self.total_it)
 
-				# targetQ_diff
-				writer.add_scalar('train_critic/target_Q_diff/mean', target_Q_diff.mean(), self.total_it)
-				writer.add_scalar('train_critic/target_Q_diff/std', torch.std(target_Q_diff), self.total_it)
-				writer.add_scalar('train_critic/target_Q_diff/max', target_Q_diff.max(), self.total_it)
-				writer.add_scalar('train_critic/target_Q_diff/min', target_Q_diff.min(), self.total_it)
+				# targetQ1_diff
+				writer.add_scalar('train_critic/target_Q1_diff/mean', target_Q1_diff.mean(), self.total_it)
+				writer.add_scalar('train_critic/target_Q1_diff/std', torch.std(target_Q1_diff), self.total_it)
+				writer.add_scalar('train_critic/target_Q1_diff/max', target_Q1_diff.max(), self.total_it)
+				writer.add_scalar('train_critic/target_Q1_diff/min', target_Q1_diff.min(), self.total_it)
+
+				# targetQ2_diff
+				writer.add_scalar('train_critic/target_Q2_diff/mean', target_Q2_diff.mean(), self.total_it)
+				writer.add_scalar('train_critic/target_Q2_diff/std', torch.std(target_Q2_diff), self.total_it)
+				writer.add_scalar('train_critic/target_Q2_diff/max', target_Q2_diff.max(), self.total_it)
+				writer.add_scalar('train_critic/target_Q2_diff/min', target_Q2_diff.min(), self.total_it)
+	
+				
+				# target_Q_mean_diff
+				writer.add_scalar('train_critic/target_Q_mean_diff/mean', target_Q_mean_diff.mean(), self.total_it)
+				writer.add_scalar('train_critic/target_Q_mean_diff/std', torch.std(target_Q_mean_diff), self.total_it)
+				writer.add_scalar('train_critic/target_Q_mean_diff/max', target_Q_mean_diff.max(), self.total_it)
+				writer.add_scalar('train_critic/target_Q_mean_diff/min', target_Q_mean_diff.min(), self.total_it)
 
 
 	
