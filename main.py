@@ -117,10 +117,7 @@ if __name__ == "__main__":
 		policy = GRAC.GRAC(**kwargs)  
 	if "GRAC_single_v2" ==  args.policy:
 		GRAC = __import__(args.policy)
-		policy = GRAC.GRAC(**kwargs)
-	if "GRAC_single_v3" ==  args.policy:
-		GRAC = __import__(args.policy)
-		policy = GRAC.GRAC(**kwargs)
+		policy = GRAC.GRAC(**kwargs)  
 	if args.load_model != "":
 		policy_file = 'model' if args.load_model == "default" else args.load_model
 		policy.load("./{}/{}".format(result_folder, policy_file))
